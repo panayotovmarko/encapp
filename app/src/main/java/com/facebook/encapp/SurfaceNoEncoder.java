@@ -121,7 +121,13 @@ public class SurfaceNoEncoder extends SurfaceEncoder implements VsyncListener {
 
         long lastPtsUsec = -1;
         int errorCounter = 0;
+        long loopStartTimeMs = System.currentTimeMillis();
         while(!done) {
+                if (System.currentTimeMillis() - loopStartTimeMs > WAIT_TIME_MS) {
+                    Log.e(TAG, "Global timeout after " + WAIT_TIME_MS + "ms" +
+                            ", inframes=" + mInFramesCount);
+                    break;
+                }
                 if (mInFramesCount % 100 == 0 && MainActivity.isStable()) {
                     Log.d(TAG, "SurfaceEncoder: frames: " + mFramesAdded +
                             " inframes: " + mInFramesCount +

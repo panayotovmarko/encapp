@@ -290,7 +290,14 @@ class BufferDecoder extends Encoder {
         MediaFormat currentOutputFormat = mDecoder.getOutputFormat();
         Dictionary<String, Object> latestFrameChanges = null;
         mLastTimeMs = ClockTimes.currentTimeMs();
+        long decodeStartTimeMs = System.currentTimeMillis();
         while (!outputDone) {
+            if (System.currentTimeMillis() - decodeStartTimeMs > WAIT_TIME_MS) {
+                Log.e(TAG, "Global decoding timeout after " + WAIT_TIME_MS + "ms" +
+                        ", inputDone=" + inputDone +
+                        ", inframes=" + mInFramesCount);
+                break;
+            }
             int index;
             long presentationTimeUs = 0L;
             if (mInFramesCount % 100 == 0 && MainActivity.isStable()) {
@@ -350,6 +357,8 @@ class BufferDecoder extends Encoder {
                                 Log.d(TAG, " *********** OPEN FILE AGAIN *******");
                                 mYuvReader.openFile(mTest.getInput().getFilepath(), mTest.getInput().getPixFmt());
                                 Log.d(TAG, "*** Loop ended start " + currentLoop + "***");
+                            } else {
+                                // Buffer was consumed by queueInputBuffer above
                             }
 
                         } else {
