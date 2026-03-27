@@ -201,18 +201,28 @@ public class AsyncBufferEncoder extends Encoder {
         mInputFeeder = new InputFeederThread();
         mInputFeeder.start();
 
-        // Wait for encoding to complete
+        // Wait for encoding to complete (with global timeout to avoid infinite hang)
+        long waitStart = System.currentTimeMillis();
         synchronized (mCompletionLock) {
             while (!mOutputDone.get()) {
                 try {
                     mCompletionLock.wait(100);
-                    
+
                     // Log progress periodically
                     if (mFramesAdded % 100 == 0 && mFramesAdded > 0) {
                         Log.d(TAG, mTest.getCommon().getId() + " - AsyncBufferEncoder: frames: " + mFramesAdded +
                                 " inframes: " + mInFramesCount +
                                 " outframes: " + mOutFramesCount +
                                 " current_time: " + mCurrentTimeSec);
+                    }
+
+                    if (System.currentTimeMillis() - waitStart > WAIT_TIME_MS) {
+                        Log.e(TAG, "Global encoding timeout after " + WAIT_TIME_MS + "ms" +
+                                " \u2014 inputDone=" + mInputDone.get() +
+                                ", frames=" + mFramesAdded +
+                                ", outframes=" + mOutFramesCount);
+                        mOutputDone.set(true);
+                        break;
                     }
                 } catch (InterruptedException e) {
                     break;
@@ -288,59 +298,75 @@ public class AsyncBufferEncoder extends Encoder {
         @Override
         public void run() {
             Log.d(TAG, "InputFeeder started, realtime=" + mRealtime);
-            
-            while (!mStopRequested && !mInputDone.get()) {
-                // Check if we're done
-                if (doneReading(mTest, mYuvReader, mInFramesCount, mCurrentTimeSec, false)) {
-                    sendEndOfStream();
-                    break;
-                }
 
-                // Wait for an available input buffer
-                Integer bufferIndex = mAvailableInputBuffers.poll();
-                if (bufferIndex == null) {
-                    // No buffer available, wait a bit
-                    try {
-                        Thread.sleep(1);
-                    } catch (InterruptedException e) {
-                        if (mStopRequested) break;
-                    }
-                    continue;
-                }
-
-                // Realtime pacing - wait until it's time for the next frame
-                if (mRealtime) {
-                    sleepUntilNextFrame();
-                }
-
-                // Fill and queue the buffer
-                int size = fillAndQueueBuffer(bufferIndex);
-                
-                if (size <= 0 && size != -2) {
-                    // End of file or error - handle looping
-                    if (mIsFakeInput) {
-                        mFakeInputReader.closeFile();
-                        mFakeInputReader.openFile(mTest.getInput().getFilepath(), 
-                                mTest.getInput().getPixFmt(),
-                                mSourceResolution.getWidth(), mSourceResolution.getHeight());
-                    } else if (mYuvReader != null) {
-                        mYuvReader.closeFile();
-                        mYuvReader.openFile(mTest.getInput().getFilepath(), mTest.getInput().getPixFmt());
-                    }
-                    mCurrentLoop++;
-                    Log.d(TAG, "*** Loop ended start " + mCurrentLoop + " ***");
-                    
-                    if (doneReading(mTest, mYuvReader, mInFramesCount, mCurrentTimeSec, true)) {
+            try {
+                while (!mStopRequested && !mInputDone.get()) {
+                    // Check if we're done
+                    if (doneReading(mTest, mYuvReader, mInFramesCount, mCurrentTimeSec, false)) {
                         sendEndOfStream();
                         break;
                     }
-                    
-                    // Return buffer to queue for retry
-                    mAvailableInputBuffers.add(bufferIndex);
+
+                    // Wait for an available input buffer
+                    Integer bufferIndex = mAvailableInputBuffers.poll();
+                    if (bufferIndex == null) {
+                        // No buffer available, wait a bit
+                        try {
+                            Thread.sleep(1);
+                        } catch (InterruptedException e) {
+                            if (mStopRequested) break;
+                        }
+                        continue;
+                    }
+
+                    // Realtime pacing - wait until it's time for the next frame
+                    if (mRealtime) {
+                        sleepUntilNextFrame();
+                    }
+
+                    // Fill and queue the buffer
+                    int size = fillAndQueueBuffer(bufferIndex);
+
+                    if (size <= 0 && size != -2) {
+                        // End of file or error - handle looping
+                        if (mIsFakeInput) {
+                            mFakeInputReader.closeFile();
+                            mFakeInputReader.openFile(mTest.getInput().getFilepath(),
+                                    mTest.getInput().getPixFmt(),
+                                    mSourceResolution.getWidth(), mSourceResolution.getHeight());
+                        } else if (mYuvReader != null) {
+                            mYuvReader.closeFile();
+                            mYuvReader.openFile(mTest.getInput().getFilepath(), mTest.getInput().getPixFmt());
+                        }
+                        mCurrentLoop++;
+                        Log.d(TAG, "*** Loop ended start " + mCurrentLoop + " ***");
+
+                        if (doneReading(mTest, mYuvReader, mInFramesCount, mCurrentTimeSec, true)) {
+                            // Return the unused buffer before sending EOS so sendEndOfStream
+                            // can pick it up instead of waiting for a new one from the codec.
+                            mAvailableInputBuffers.add(bufferIndex);
+                            sendEndOfStream();
+                            break;
+                        }
+
+                        // Return buffer to queue for retry
+                        mAvailableInputBuffers.add(bufferIndex);
+                    }
                 }
+            } catch (Exception e) {
+                Log.e(TAG, "InputFeeder crashed: " + e.getMessage(), e);
+            } finally {
+                // Guarantee the main thread is unblocked no matter what happens
+                if (!mOutputDone.get()) {
+                    Log.w(TAG, "InputFeeder exiting without output completion \u2014 forcing finish");
+                    mInputDone.set(true);
+                    mOutputDone.set(true);
+                    synchronized (mCompletionLock) {
+                        mCompletionLock.notifyAll();
+                    }
+                }
+                Log.d(TAG, "InputFeeder stopped");
             }
-            
-            Log.d(TAG, "InputFeeder stopped");
         }
 
         private void sendEndOfStream() {

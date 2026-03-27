@@ -3132,30 +3132,33 @@ def merge_options(option1, options2):
 
 
 def get_workdir(serial, debug=0):
-    workdir = ""
-    if not encapp_tool.adb_cmds.USE_IDB:
-        encapp_tool.adb_cmds.reset_logcat(serial, debug)
-        adb_cmd = (
-            f"adb -s {serial} shell am start "
-            f"-e check_workdir  a {encapp_tool.app_utils.ACTIVITY}"
-        )
-        ret, stdout, stderr = encapp_tool.adb_cmds.run_cmd(adb_cmd, debug)
-        # it seems some devices have a longer delayuntil logs appear in the log
-        sleeptime = 2
-        wait_time = 30
-        while wait_time > 0:
-            time.sleep(sleeptime)
-            # Get logcat and look for:
-            # encapp.clisettings: workdir: /data/user/0/com.facebook.encapp/files
-            logcat_contents = encapp_tool.adb_cmds.logcat_dump(serial, debug)
-            reg = r"encapp workdir:[\w]*(?P<workdir>.*)"
-            m = re.search(reg, logcat_contents)
-            if m:
-                workdir = m.group("workdir")
-                break
-            wait_time -= sleeptime
+    """Auto-detect a writable workdir on the device.
 
-    return workdir
+    Tries /sdcard/ first (works on most devices), falls back to the
+    app-private directory for devices that restrict external storage.
+    Uses an actual write probe instead of relying on logcat parsing.
+    """
+    if encapp_tool.adb_cmds.USE_IDB:
+        return ""
+
+    default_dir = "/sdcard"
+    app_private_dir = f"/data/data/{encapp_tool.app_utils.APPNAME_MAIN}/files"
+
+    for candidate in [default_dir, app_private_dir]:
+        # Try to write and remove a probe file
+        probe = f"{candidate}/_encapp_probe.tmp"
+        cmd = f"adb -s {serial} shell 'touch {probe} && rm -f {probe}'"
+        ret, stdout, stderr = encapp_tool.adb_cmds.run_cmd(cmd, debug)
+        if ret and "Permission denied" not in stdout and "Read-only" not in stdout:
+            if debug > 0:
+                print(f"get_workdir: {candidate} is writable")
+            return candidate
+        if debug > 0:
+            print(f"get_workdir: {candidate} not writable, trying next...")
+
+    # Nothing worked — return default, let downstream handle the error
+    print(f"Warning: could not find writable workdir on device {serial}")
+    return default_dir
 
 
 def main(argv):
