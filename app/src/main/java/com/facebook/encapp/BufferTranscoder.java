@@ -346,7 +346,10 @@ public class BufferTranscoder extends Encoder  {
         mSourceReader.start();
         mStats.start();
         try {
-            mSourceReader.join();
+            mSourceReader.join(WAIT_TIME_MS);
+            if (mSourceReader.isAlive()) {
+                Log.e(TAG, "SourceReader did not finish within timeout");
+            }
         } catch (InterruptedException e) {
             e.printStackTrace();
             return "Interrupted exception.";
@@ -505,6 +508,7 @@ public class BufferTranscoder extends Encoder  {
         @Override
         public void run() {
             Dictionary<String, Object> latestFrameChanges;
+            try {
             while (!mDone) {
                 while (mDecoderBuffers.size() > 0 && !mDone) {
                     if (mInFramesCount % 100 == 0 && MainActivity.isStable()) {
@@ -550,10 +554,12 @@ public class BufferTranscoder extends Encoder  {
                     }
 
                     if (mDone) {
-                        flags += MediaCodec.BUFFER_FLAG_END_OF_STREAM;
-                    }
-
-                    if (mDone) {
+                        flags |= MediaCodec.BUFFER_FLAG_END_OF_STREAM;
+                        try {
+                            mDecoder.queueInputBuffer(index, 0, 0, ptsUsec, flags);
+                        } catch (IllegalStateException ise) {
+                            Log.e(TAG, "Failed to queue EOS: " + ise.getMessage());
+                        }
                         continue;
                     }
                     setDecoderRuntimeParameters(mTest, mInFramesCount);
@@ -604,6 +610,11 @@ public class BufferTranscoder extends Encoder  {
                     mLastPtsUs = ptsUsec;
                 }
             }
+            } catch (Exception e) {
+                Log.e(TAG, "SourceReader crashed: " + e.getMessage(), e);
+            } finally {
+                mDone = true;
+            }
         }
 
         public void addBuffer(int id) {
@@ -621,24 +632,31 @@ public class BufferTranscoder extends Encoder  {
 
         @Override
         public void run() {
+            try {
             while (!mDone) {
                 if (mDecoderBuffers.size() == 0) {
                     synchronized (mDecoderBuffers) {
                         try {
-                            mDecoderBuffers.wait();
+                            mDecoderBuffers.wait(WAIT_TIME_SHORT_MS);
                         } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
+                            break;
                         }
                     }
                 }
-                FrameBuffer frameBuffer = mDecoderBuffers.remove();
+                if (mDecoderBuffers.isEmpty()) {
+                    continue;
+                }
+                FrameBuffer frameBuffer = mDecoderBuffers.poll();
+                if (frameBuffer == null) {
+                    continue;
+                }
                 Integer encBufferIndex = -1;
                 synchronized (mEncoderInputBuffers) {
                     if (mEncoderInputBuffers.size() == 0) {
                         try {
-                            mEncoderInputBuffers.wait();
+                            mEncoderInputBuffers.wait(WAIT_TIME_SHORT_MS);
                         } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
+                            break;
                         }
                     }
                     if (mEncoderInputBuffers.size() > 0) {
@@ -678,9 +696,16 @@ public class BufferTranscoder extends Encoder  {
                         }
                         mCodec.queueInputBuffer(encBufferIndex, 0 /* offset */, decoderBuffer.limit(), frameBuffer.getTimestampUs() /* timeUs */, frameBuffer.mInfo.flags);
 
+                    mDecoder.releaseOutputBuffer(frameBuffer.mBufferId, false);
+                    } else {
                         mDecoder.releaseOutputBuffer(frameBuffer.mBufferId, false);
                     }
                 }
+            }
+            } catch (Exception e) {
+                Log.e(TAG, "EncoderWriter crashed: " + e.getMessage(), e);
+            } finally {
+                mDone = true;
             }
         }
 

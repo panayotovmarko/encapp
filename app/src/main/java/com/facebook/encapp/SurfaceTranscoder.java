@@ -351,7 +351,10 @@ public class SurfaceTranscoder extends SurfaceEncoder {
         mSourceReader.start();
         mStats.start();
         try {
-            mSourceReader.join();
+            mSourceReader.join(WAIT_TIME_MS);
+            if (mSourceReader.isAlive()) {
+                Log.e(TAG, "SourceReader did not finish within timeout");
+            }
         } catch (InterruptedException e) {
             e.printStackTrace();
             return "Interrupted exception.";
@@ -524,6 +527,7 @@ public class SurfaceTranscoder extends SurfaceEncoder {
         public void run() {
             Dictionary<String, Object> latestFrameChanges;
             Log.d(TAG, "Start Source reader.");
+            try {
             while (!mDone) {
                 while (mDecoderBuffers.size() > 0 && !mDone) {
                     if (mInFramesCount % 100 == 0 && MainActivity.isStable()) {
@@ -574,10 +578,12 @@ public class SurfaceTranscoder extends SurfaceEncoder {
                     }
 
                     if (mDone) {
-                        flags += MediaCodec.BUFFER_FLAG_END_OF_STREAM;
-                    }
-
-                    if (mDone) {
+                        flags |= MediaCodec.BUFFER_FLAG_END_OF_STREAM;
+                        try {
+                            mDecoder.queueInputBuffer(index, 0, 0, ptsUsec, flags);
+                        } catch (IllegalStateException ise) {
+                            Log.e(TAG, "Failed to queue EOS: " + ise.getMessage());
+                        }
                         continue;
                     }
                     setDecoderRuntimeParameters(mTest, mInFramesCount);
@@ -623,6 +629,11 @@ public class SurfaceTranscoder extends SurfaceEncoder {
                     mLastPtsUs = ptsUsec;
                     if (mRealtime && mFirstDecodedFrame) sleepUntilNextFrame();
                 }
+            }
+            } catch (Exception e) {
+                Log.e(TAG, "SourceReader crashed: " + e.getMessage(), e);
+            } finally {
+                mDone = true;
             }
         }
 

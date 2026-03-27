@@ -328,6 +328,10 @@ class BufferEncoder extends Encoder {
                 }
                 if (index >= 0) {
                     failures = 0;
+                    if (input_done) {
+                        long pts = computePresentationTimeUs(mPts, mInFramesCount, mRefFrameTime);
+                        mCodec.queueInputBuffer(index, 0, 0, pts, flags);
+                    } else {
                     int size = -1;
                     // get the ByteBuffer where we will write the image to encode
                     ByteBuffer byteBuffer = mCodec.getInputBuffer(index);
@@ -379,9 +383,10 @@ class BufferEncoder extends Encoder {
                                 } else {
                                     mYuvReader.openFile(mTest.getInput().getFilepath(), mTest.getInput().getPixFmt());
                                 }
-                                Log.d(TAG, "*** Loop ended start " + current_loop + "***");
+                          Log.d(TAG, "*** Loop ended start " + current_loop + "***");
                             }
                         }
+                    }
                     }
                 } else {
                     Log.w(TAG, "dequeueInputBuffer, no index, " + index);

@@ -1,0 +1,15 @@
+# System test for buffer decoding
+# Decodes video file using buffer mode (no re-encoding)
+test {
+    input {
+        filepath: "/tmp/akiyo_qcif.mp4"
+        device_decode: true
+    }
+    common {
+        id: "system_test_buffer_decode"
+        description: "Verify buffer decoding"
+    }
+    configure {
+        encode: false
+    }
+}
