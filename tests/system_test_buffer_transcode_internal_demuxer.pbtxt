@@ -1,0 +1,20 @@
+# System test for buffer transcoding with internal demuxer
+# Uses internal Java demuxer instead of Android MediaExtractor
+test {
+    input {
+        filepath: "/tmp/akiyo_qcif.mp4"
+        device_decode: true
+    }
+    common {
+        id: "system_test_buffer_transcode_internal_demuxer"
+        description: "Verify buffer transcoding with internal demuxer"
+    }
+    configure {
+        bitrate: "200 kbps"
+        framerate: 30
+        i_frame_interval: 1
+    }
+    test_setup {
+        internal_demuxer: true
+    }
+}

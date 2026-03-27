@@ -1,0 +1,24 @@
+# System test for buffer encoding with internal muxer
+# Uses internal Java muxer instead of Android MediaMuxer
+test {
+    input {
+        filepath: "fake_input"
+        resolution: "640x480"
+        framerate: 30
+        pix_fmt: nv12
+        playout_frames: 100
+    }
+    common {
+        id: "system_test_buffer_encode_internal_muxer"
+        description: "Verify buffer encoding with internal muxer"
+    }
+    configure {
+        bitrate: "500 kbps"
+        framerate: 30
+        i_frame_interval: 1
+        encode: true
+    }
+    test_setup {
+        internal_muxer: true
+    }
+}

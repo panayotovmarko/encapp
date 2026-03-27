@@ -249,3 +249,180 @@ def test_buffer_transcoding(tmp_path, setup_data):
 
     except subprocess.CalledProcessError as err:
         pytest.fail(f"Buffer transcoding failed: {err.stdout}")
+
+
+def test_buffer_decoding(tmp_path, setup_data):
+    """Verify buffer decoding (decode only, no re-encode) works on test device"""
+    try:
+        output_path = f"{tmp_path}/encapp_buffer_decode_test/"
+        subprocess.run(
+            [
+                f"{PYTHON_ENV} {ENCAPP_SCRIPT_PATH} "
+                f"--serial {ANDROID_SERIAL} run "
+                f"{TEST_SCRIPTS_DIR}/system_test_buffer_decode.pbtxt "
+                f"--local-workdir {output_path}"
+            ],
+            shell=True,
+            check=True,
+            text=True,
+            stderr=subprocess.STDOUT,
+            stdout=subprocess.PIPE,
+        )
+    except subprocess.CalledProcessError as err:
+        pytest.fail(f"Buffer decoding failed: {err.stdout}")
+
+
+def test_surface_encoding(tmp_path, setup_data):
+    """Verify surface encoding works on test device"""
+    try:
+        result = subprocess.run(
+            [
+                f"{PYTHON_ENV} {ENCAPP_SCRIPT_PATH} "
+                f"--serial {ANDROID_SERIAL} list --codec '.*h264.*' --sw --encoder"
+            ],
+            shell=True,
+            check=True,
+            text=True,
+            stderr=subprocess.STDOUT,
+            stdout=subprocess.PIPE,
+        )
+        codec = result.stdout.strip()
+        assert len(codec) > 0, "No h264 encoder found"
+
+        output_path = f"{tmp_path}/encapp_surface_encode_test/"
+        subprocess.run(
+            [
+                f"{PYTHON_ENV} {ENCAPP_SCRIPT_PATH} "
+                f"--serial {ANDROID_SERIAL} run "
+                f"{TEST_SCRIPTS_DIR}/system_test_surface_encode.pbtxt "
+                f"--codec {codec} --local-workdir {output_path}"
+            ],
+            shell=True,
+            check=True,
+            text=True,
+            stderr=subprocess.STDOUT,
+            stdout=subprocess.PIPE,
+        )
+        output_files = os.listdir(output_path) if os.path.exists(output_path) else []
+        mp4_files = [f for f in output_files if f.endswith('.mp4')]
+        assert len(mp4_files) > 0, f"No output MP4 files found in {output_path}"
+
+    except subprocess.CalledProcessError as err:
+        pytest.fail(f"Surface encoding failed: {err.stdout}")
+
+
+def test_buffer_encoding_internal_muxer(tmp_path, setup_data):
+    """Verify buffer encoding with internal muxer works on test device"""
+    try:
+        result = subprocess.run(
+            [
+                f"{PYTHON_ENV} {ENCAPP_SCRIPT_PATH} "
+                f"--serial {ANDROID_SERIAL} list --codec '.*h264.*' --sw --encoder"
+            ],
+            shell=True,
+            check=True,
+            text=True,
+            stderr=subprocess.STDOUT,
+            stdout=subprocess.PIPE,
+        )
+        codec = result.stdout.strip()
+        assert len(codec) > 0, "No h264 encoder found"
+
+        output_path = f"{tmp_path}/encapp_buffer_encode_internal_muxer_test/"
+        subprocess.run(
+            [
+                f"{PYTHON_ENV} {ENCAPP_SCRIPT_PATH} "
+                f"--serial {ANDROID_SERIAL} run "
+                f"{TEST_SCRIPTS_DIR}/system_test_buffer_encode_internal_muxer.pbtxt "
+                f"--codec {codec} --local-workdir {output_path}"
+            ],
+            shell=True,
+            check=True,
+            text=True,
+            stderr=subprocess.STDOUT,
+            stdout=subprocess.PIPE,
+        )
+        output_files = os.listdir(output_path) if os.path.exists(output_path) else []
+        mp4_files = [f for f in output_files if f.endswith('.mp4')]
+        assert len(mp4_files) > 0, f"No output MP4 files found in {output_path}"
+
+    except subprocess.CalledProcessError as err:
+        pytest.fail(f"Buffer encoding with internal muxer failed: {err.stdout}")
+
+
+def test_buffer_transcoding_internal_demuxer(tmp_path, setup_data):
+    """Verify buffer transcoding with internal demuxer works on test device"""
+    try:
+        result = subprocess.run(
+            [
+                f"{PYTHON_ENV} {ENCAPP_SCRIPT_PATH} "
+                f"--serial {ANDROID_SERIAL} list --codec '.*h264.*' --sw --encoder"
+            ],
+            shell=True,
+            check=True,
+            text=True,
+            stderr=subprocess.STDOUT,
+            stdout=subprocess.PIPE,
+        )
+        codec = result.stdout.strip()
+        assert len(codec) > 0, "No h264 encoder found"
+
+        output_path = f"{tmp_path}/encapp_buffer_transcode_internal_demuxer_test/"
+        subprocess.run(
+            [
+                f"{PYTHON_ENV} {ENCAPP_SCRIPT_PATH} "
+                f"--serial {ANDROID_SERIAL} run "
+                f"{TEST_SCRIPTS_DIR}/system_test_buffer_transcode_internal_demuxer.pbtxt "
+                f"--codec {codec} --local-workdir {output_path}"
+            ],
+            shell=True,
+            check=True,
+            text=True,
+            stderr=subprocess.STDOUT,
+            stdout=subprocess.PIPE,
+        )
+        output_files = os.listdir(output_path) if os.path.exists(output_path) else []
+        mp4_files = [f for f in output_files if f.endswith('.mp4')]
+        assert len(mp4_files) > 0, f"No output MP4 files found in {output_path}"
+
+    except subprocess.CalledProcessError as err:
+        pytest.fail(f"Buffer transcoding with internal demuxer failed: {err.stdout}")
+
+
+def test_surface_transcoding_internal_demuxer(tmp_path, setup_data):
+    """Verify surface transcoding with internal demuxer works on test device"""
+    try:
+        result = subprocess.run(
+            [
+                f"{PYTHON_ENV} {ENCAPP_SCRIPT_PATH} "
+                f"--serial {ANDROID_SERIAL} list --codec '.*h264.*' --sw --encoder"
+            ],
+            shell=True,
+            check=True,
+            text=True,
+            stderr=subprocess.STDOUT,
+            stdout=subprocess.PIPE,
+        )
+        codec = result.stdout.strip()
+        assert len(codec) > 0, "No h264 encoder found"
+
+        output_path = f"{tmp_path}/encapp_surface_transcode_internal_demuxer_test/"
+        subprocess.run(
+            [
+                f"{PYTHON_ENV} {ENCAPP_SCRIPT_PATH} "
+                f"--serial {ANDROID_SERIAL} run "
+                f"{TEST_SCRIPTS_DIR}/system_test_surface_transcode_internal_demuxer.pbtxt "
+                f"--codec {codec} --local-workdir {output_path}"
+            ],
+            shell=True,
+            check=True,
+            text=True,
+            stderr=subprocess.STDOUT,
+            stdout=subprocess.PIPE,
+        )
+        output_files = os.listdir(output_path) if os.path.exists(output_path) else []
+        mp4_files = [f for f in output_files if f.endswith('.mp4')]
+        assert len(mp4_files) > 0, f"No output MP4 files found in {output_path}"
+
+    except subprocess.CalledProcessError as err:
+        pytest.fail(f"Surface transcoding with internal demuxer failed: {err.stdout}")
